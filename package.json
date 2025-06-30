@@ -1,0 +1,49 @@
+{
+  "name": "learn-dlq",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "serverless deploy",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:staging": "serverless deploy --stage staging",
+    "deploy:prod": "serverless deploy --stage prod",
+    "remove": "serverless remove",
+    "remove:dev": "serverless remove --stage dev",
+    "remove:staging": "serverless remove --stage staging",
+    "remove:prod": "serverless remove --stage prod",
+    "logs": "serverless logs",
+    "logs:submit": "serverless logs --function submitTask --tail",
+    "logs:process": "serverless logs --function processTask --tail",
+    "logs:dlq": "serverless logs --function monitorDLQ --tail",
+    "info": "serverless info",
+    "info:dev": "serverless info --stage dev",
+    "info:staging": "serverless info --stage staging",
+    "info:prod": "serverless info --stage prod",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "serverless offline --stage local",
+    "start:simple": "IS_LOCAL=true serverless offline --stage local --noTimeout",
+    "test:api": "./test-api.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.150",
+    "@types/node": "^24.0.3",
+    "serverless": "^3.40.0",
+    "serverless-plugin-typescript": "^2.1.5",
+    "serverless-offline": "^12.0.4",
+    "serverless-offline-sqs": "^7.3.2",
+    "serverless-localstack": "^1.1.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.830.0",
+    "@aws-sdk/client-sqs": "^3.831.0",
+    "@aws-sdk/lib-dynamodb": "^3.830.0",
+    "aws-sdk": "^2.1692.0",
+    "uuid": "^11.1.0"
+  }
+}

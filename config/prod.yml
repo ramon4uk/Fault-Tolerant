@@ -1,0 +1,58 @@
+# Production Environment Configuration
+stage: prod
+region: us-east-1
+
+# Lambda Configuration
+lambda:
+  timeout: 900
+  memorySize: 2048
+  runtime: nodejs18.x
+  reservedConcurrency: 100
+
+# SQS Configuration
+sqs:
+  visibilityTimeoutSeconds: 900
+  messageRetentionPeriod: 1209600  # 14 days
+  maxReceiveCount: 5  # Initial + 4 retries for production
+  batchSize: 10
+
+# DynamoDB Configuration
+dynamodb:
+  billingMode: PAY_PER_REQUEST
+  pointInTimeRecovery: true
+  streamViewType: NEW_AND_OLD_IMAGES
+  deletionProtection: true
+
+# API Gateway Configuration
+apiGateway:
+  cors: true
+  requestValidation: true
+  throttling:
+    burstLimit: 5000
+    rateLimit: 2000
+
+# Monitoring Configuration
+monitoring:
+  enableXRay: true
+  logRetention: 30  # days
+  enableDetailedMetrics: true
+
+# Task Processing Configuration
+taskProcessing:
+  maxRetries: 4  # More retries in production
+  baseDelaySeconds: 2
+  maxDelaySeconds: 3600  # 1 hour max delay
+  failureRate: 0.0  # No artificial failures in production
+
+# Alarms Configuration
+alarms:
+  enableDLQAlarm: true
+  dlqMessageThreshold: 10
+  errorRateThreshold: 0.05  # 5%
+  
+# Tags
+tags:
+  Environment: prod
+  Project: learn-dlq
+  Owner: ops-team
+  CostCenter: "12345"

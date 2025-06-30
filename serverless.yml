@@ -1,0 +1,208 @@
+service: learn-dlq
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: ${file(./config/${self:custom.stage}.yml):lambda.runtime}
+  stage: ${opt:stage, 'dev'}
+  region: ${file(./config/${self:custom.stage}.yml):region}
+  
+  environment:
+    TASKS_TABLE: ${self:custom.tasksTable}
+    TASK_QUEUE_URL: !Ref TaskQueue
+    DLQ_URL: !Ref TaskDLQ
+    MAX_RETRIES: ${file(./config/${self:custom.stage}.yml):taskProcessing.maxRetries}
+    BASE_DELAY_SECONDS: ${file(./config/${self:custom.stage}.yml):taskProcessing.baseDelaySeconds}
+    MAX_DELAY_SECONDS: ${file(./config/${self:custom.stage}.yml):taskProcessing.maxDelaySeconds}
+    FAILURE_RATE: ${file(./config/${self:custom.stage}.yml):taskProcessing.failureRate}
+  
+  tracing:
+    lambda: ${file(./config/${self:custom.stage}.yml):monitoring.enableXRay}
+  
+  logs:
+    restApi: true
+  
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - !GetAtt TasksTable.Arn
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - !GetAtt TaskQueue.Arn
+            - !GetAtt TaskDLQ.Arn
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: "*"
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+  - serverless-offline-sqs
+  - serverless-localstack
+
+custom:
+  stage: ${opt:stage, 'dev'}
+  tasksTable: ${self:service}-tasks-${self:custom.stage}
+  
+  # Environment-specific tags
+  tags: ${file(./config/${self:custom.stage}.yml):tags}
+
+  # LocalStack configuration
+  localstack:
+    stages:
+      - local
+    host: http://localhost
+    edgePort: 4566
+    autostart: false
+    lambda:
+      mountCode: true
+    docker:
+      sudo: false
+
+  # Serverless Offline configuration
+  serverless-offline:
+    httpPort: 3000
+    babelOptions:
+      presets: ["env"]
+    
+  # Serverless Offline SQS configuration  
+  serverless-offline-sqs:
+    autoCreate: true                 # create queue if not exists
+    apiVersion: '2012-11-05'
+    endpoint: http://localhost:4566
+    region: ${self:provider.region}
+    accessKeyId: test
+    secretAccessKey: test
+    skipCacheInvalidation: false
+
+functions:
+  submitTask:
+    handler: src/handlers/submitTask.handler
+    timeout: ${file(./config/${self:custom.stage}.yml):lambda.timeout}
+    memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
+    events:
+      - http:
+          path: /tasks
+          method: post
+          cors: ${file(./config/${self:custom.stage}.yml):apiGateway.cors}
+  
+  getTaskStatus:
+    handler: src/handlers/getTaskStatus.handler
+    timeout: ${file(./config/${self:custom.stage}.yml):lambda.timeout}
+    memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
+    events:
+      - http:
+          path: /tasks
+          method: get
+          cors: ${file(./config/${self:custom.stage}.yml):apiGateway.cors}
+  
+  processTask:
+    handler: src/handlers/processTask.handler
+    timeout: ${file(./config/${self:custom.stage}.yml):lambda.timeout}
+    memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
+    events:
+      - sqs:
+          arn: !GetAtt TaskQueue.Arn
+          batchSize: ${file(./config/${self:custom.stage}.yml):sqs.batchSize}
+          maximumBatchingWindowInSeconds: 0
+  
+  monitorDLQ:
+    handler: src/handlers/monitorDLQ.handler
+    timeout: 60
+    memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
+    events:
+      - sqs:
+          arn: !GetAtt TaskDLQ.Arn
+          batchSize: 1
+          maximumBatchingWindowInSeconds: 0
+
+resources:
+  Resources:
+    TasksTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tasksTable}
+        AttributeDefinitions:
+          - AttributeName: taskId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: taskId
+            KeyType: HASH
+        BillingMode: ${file(./config/${self:custom.stage}.yml):dynamodb.billingMode}
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: ${file(./config/${self:custom.stage}.yml):dynamodb.pointInTimeRecovery}
+        StreamSpecification:
+          StreamViewType: ${file(./config/${self:custom.stage}.yml):dynamodb.streamViewType}
+        Tags: ${self:custom.tags}
+    
+    TaskQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-task-queue-${self:custom.stage}
+        VisibilityTimeoutSeconds: ${file(./config/${self:custom.stage}.yml):sqs.visibilityTimeoutSeconds}
+        MessageRetentionPeriod: ${file(./config/${self:custom.stage}.yml):sqs.messageRetentionPeriod}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt TaskDLQ.Arn
+          maxReceiveCount: ${file(./config/${self:custom.stage}.yml):sqs.maxReceiveCount}
+        Tags: ${self:custom.tags}
+    
+    TaskDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-task-dlq-${self:custom.stage}
+        MessageRetentionPeriod: ${file(./config/${self:custom.stage}.yml):sqs.messageRetentionPeriod}
+        Tags: ${self:custom.tags}
+
+  Outputs:
+    TasksTableName:
+      Description: "DynamoDB Tasks Table Name"
+      Value: !Ref TasksTable
+      Export:
+        Name: ${self:service}-${self:provider.stage}-TasksTable
+    
+    TaskQueueUrl:
+      Description: "SQS Task Queue URL"
+      Value: !Ref TaskQueue
+      Export:
+        Name: ${self:service}-${self:provider.stage}-TaskQueue
+    
+    TaskDLQUrl:
+      Description: "SQS Task DLQ URL"
+      Value: !Ref TaskDLQ
+      Export:
+        Name: ${self:service}-${self:provider.stage}-TaskDLQ
+    
+    ApiGatewayRestApiId:
+      Description: "API Gateway REST API ID"
+      Value: !Ref ApiGatewayRestApi
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiId
+    
+    ApiGatewayEndpoint:
+      Description: "API Gateway Endpoint"
+      Value: !Sub "https://${ApiGatewayRestApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiEndpoint

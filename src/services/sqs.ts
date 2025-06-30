@@ -1,0 +1,76 @@
+import { SQSClient, SendMessageCommand, GetQueueAttributesCommand } from '@aws-sdk/client-sqs';
+import { TaskMessage } from '../types';
+
+// Configure SQS client for local development
+const isDevelopment = process.env.NODE_ENV === 'development' || process.env.IS_LOCAL || process.env.IS_OFFLINE;
+
+const sqsClient = new SQSClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  ...(isDevelopment && {
+    endpoint: 'http://localhost:4566',
+    credentials: {
+      accessKeyId: 'test',
+      secretAccessKey: 'test',
+    },
+  }),
+});
+
+export class SQSService {
+  private taskQueueUrl: string;
+  private dlqUrl: string;
+
+  constructor() {
+    this.taskQueueUrl = process.env.TASK_QUEUE_URL || 'http://localhost:4566/000000000000/learn-dlq-task-queue-local';
+    this.dlqUrl = process.env.DLQ_URL || 'http://localhost:4566/000000000000/learn-dlq-task-dlq-local';
+  }
+
+  async sendTaskToQueue(taskMessage: TaskMessage): Promise<void> {
+    const command = new SendMessageCommand({
+      QueueUrl: this.taskQueueUrl,
+      MessageBody: JSON.stringify(taskMessage),
+      MessageAttributes: {
+        TaskId: {
+          StringValue: taskMessage.taskId,
+          DataType: 'String'
+        }
+      }
+    });
+
+    await sqsClient.send(command);
+  }
+
+  async sendTaskToDLQ(taskMessage: TaskMessage, reason: string): Promise<void> {
+    const dlqMessage = {
+      ...taskMessage,
+      dlqReason: reason,
+      dlqTimestamp: new Date().toISOString()
+    };
+
+    const command = new SendMessageCommand({
+      QueueUrl: this.dlqUrl,
+      MessageBody: JSON.stringify(dlqMessage),
+      MessageAttributes: {
+        TaskId: {
+          StringValue: taskMessage.taskId,
+          DataType: 'String'
+        },
+        DLQReason: {
+          StringValue: reason,
+          DataType: 'String'
+        }
+      }
+    });
+
+    await sqsClient.send(command);
+  }
+
+  async getQueueAttributes(queueUrl: string): Promise<any> {
+    const command = new GetQueueAttributesCommand({
+      QueueUrl: queueUrl,
+      AttributeNames: ['All']
+    });
+
+    const result = await sqsClient.send(command);
+    return result.Attributes;
+  }
+}

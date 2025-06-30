@@ -1,0 +1,45 @@
+# Development Environment Configuration
+stage: dev
+region: us-east-1
+
+# Lambda Configuration
+lambda:
+  timeout: 300
+  memorySize: 512
+  runtime: nodejs18.x
+
+# SQS Configuration
+sqs:
+  visibilityTimeoutSeconds: 300
+  messageRetentionPeriod: 1209600  # 14 days
+  maxReceiveCount: 3  # Initial + 2 retries
+  batchSize: 1
+
+# DynamoDB Configuration
+dynamodb:
+  billingMode: PAY_PER_REQUEST
+  pointInTimeRecovery: false
+  streamViewType: NEW_AND_OLD_IMAGES
+
+# API Gateway Configuration
+apiGateway:
+  cors: true
+  requestValidation: false
+
+# Monitoring Configuration
+monitoring:
+  enableXRay: false
+  logRetention: 7  # days
+
+# Task Processing Configuration
+taskProcessing:
+  maxRetries: 2
+  baseDelaySeconds: 2
+  maxDelaySeconds: 900  # 15 minutes
+  failureRate: 0.3  # 30% failure simulation
+
+# Tags
+tags:
+  Environment: dev
+  Project: learn-dlq
+  Owner: developer
