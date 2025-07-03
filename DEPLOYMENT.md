@@ -28,9 +28,24 @@ The application supports three environments: `dev`, `staging`, and `prod`. Each 
 
 ## Deployment Commands
 
-### Development Environment
+### AWS Development Environment (Recommended)
 ```bash
-# Deploy to dev
+# Deploy to AWS dev
+npm run deploy:aws-dev
+
+# Get AWS dev environment info
+npm run info:aws-dev
+
+# View AWS dev logs
+npm run logs:process -- --stage aws-dev
+
+# Remove AWS dev deployment
+npm run remove:aws-dev
+```
+
+### Local Development Alternative
+```bash
+# Deploy to dev (alternative to aws-dev)
 npm run deploy:dev
 
 # Get dev environment info
@@ -92,7 +107,7 @@ Each environment automatically configures the following environment variables fo
 Resources are named using the pattern: `{service}-{resource}-{stage}`
 
 Examples:
-- `learn-dlq-tasks-dev` (DynamoDB table)
+- `learn-dlq-tasks-aws-dev` (DynamoDB table)
 - `learn-dlq-task-queue-prod` (SQS queue)
 - `learn-dlq-task-dlq-staging` (DLQ queue)
 

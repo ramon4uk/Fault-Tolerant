@@ -154,24 +154,27 @@ curl http://localhost:3000/local/tasks
 For immediate full functionality:
 ```bash
 # Deploy to AWS dev environment
-npm run deploy:dev
+npm run deploy:aws-dev
 
 # Test with real AWS services
-npm run test:dev
+npm run test:aws-dev
 ```
 
 ## Deployment
 
 Deploy to AWS:
 ```bash
-# Deploy to dev stage (default)
+# Deploy to AWS development environment (recommended)
+npm run deploy:aws-dev
+
+# Deploy to dev stage (local alternative)
 npm run deploy:dev
 
 # Deploy to production
 npm run deploy:prod
 
 # Remove deployment
-npm run remove
+npm run remove:aws-dev
 ```
 
 ## API Endpoints
@@ -180,7 +183,7 @@ After deployment, you'll get API Gateway endpoints:
 
 ### Submit Task
 ```bash
-POST https://your-api-id.execute-api.region.amazonaws.com/dev/tasks
+POST https://your-api-id.execute-api.region.amazonaws.com/aws-dev/tasks
 Content-Type: application/json
 
 {
@@ -199,7 +202,7 @@ Response:
 
 ### Get Task Status
 ```bash
-GET https://your-api-id.execute-api.region.amazonaws.com/dev/tasks
+GET https://your-api-id.execute-api.region.amazonaws.com/aws-dev/tasks
 ```
 
 Response:
@@ -345,12 +348,12 @@ npm run logs -- -f processTask -t
 Test with curl against deployed AWS environment:
 ```bash
 # Submit a task
-curl -X POST https://your-api-id.execute-api.region.amazonaws.com/dev/tasks \
+curl -X POST https://your-api-id.execute-api.region.amazonaws.com/aws-dev/tasks \
   -H "Content-Type: application/json" \
   -d '{"answer": "test answer"}'
 
 # Check task status (will show PROCESSED/FAILED after processing)
-curl https://your-api-id.execute-api.region.amazonaws.com/dev/tasks
+curl https://your-api-id.execute-api.region.amazonaws.com/aws-dev/tasks
 ```
 
 ### Local Testing (Limited Functionality)

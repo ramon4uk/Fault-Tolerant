@@ -133,7 +133,7 @@ functions:
     memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
     events:
       - sqs:
-          arn: arn:aws:sqs:us-east-1:000000000000:learn-dlq-task-queue-local
+          arn: !GetAtt TaskQueue.Arn
           batchSize: ${file(./config/${self:custom.stage}.yml):sqs.batchSize}
   
   monitorDLQ:
@@ -142,7 +142,7 @@ functions:
     memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
     events:
       - sqs:
-          arn: arn:aws:sqs:us-east-1:000000000000:learn-dlq-task-dlq-local
+          arn: !GetAtt TaskDLQ.Arn
           batchSize: 1
 
 resources:
