@@ -1,4 +1,4 @@
-# Learn DLQ - Task Processing with Dead Letter Queue
+# Fault-Tolerant Task processing - Task Processing with Dead Letter Queue
 
 A Node.js backend built with AWS services that demonstrates task processing with exponential backoff retry strategy and Dead Letter Queue (DLQ) monitoring.
 
@@ -148,15 +148,6 @@ curl http://localhost:3000/local/tasks
 
 # Result: Tasks remain in PENDING status indefinitely ❌
 ```
-
-### 📋 Alternatives for Local Development
-
-For full functionality testing, see **[LOCAL_DEVELOPMENT_ALTERNATIVES.md](LOCAL_DEVELOPMENT_ALTERNATIVES.md)** which provides several proven approaches:
-
-1. **AWS Dev Environment** (Recommended) - Use real AWS services
-2. **Manual Testing Scripts** - Bypass SQS integration issues
-3. **AWS SAM Local** - Better LocalStack integration
-4. **Hybrid Approach** - Mix of local and AWS services
 
 ### 🚀 Quick Start for Full Testing
 
@@ -377,9 +368,6 @@ curl -X POST http://localhost:3000/local/tasks \
 # Check task status (will remain PENDING - see Local Development section)
 curl http://localhost:3000/local/tasks
 ```
-
-**Note**: For full end-to-end testing including task processing, use the AWS environment or see the [LOCAL_DEVELOPMENT_ALTERNATIVES.md](LOCAL_DEVELOPMENT_ALTERNATIVES.md) guide.
-
 ## Cleanup
 
 Remove all AWS resources:
