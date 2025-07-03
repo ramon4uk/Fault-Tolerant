@@ -1,58 +1,43 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, GetCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { Task, TaskStatus } from '../types';
-import { MockTaskService } from './mock-services';
 
-// Check if we should use mock services (when running locally without Docker)
-const useLocalMock = process.env.IS_LOCAL === 'true' || process.env.IS_OFFLINE === 'true';
-
-// Configure DynamoDB client for local development
+// Check if we're running in development mode for LocalStack
 const isDevelopment = process.env.NODE_ENV === 'development' || process.env.IS_LOCAL || process.env.IS_OFFLINE;
 
-let ddbClient: DynamoDBClient;
-let docClient: DynamoDBDocumentClient;
+let dynamoClient: DynamoDBClient;
+let dynamoDocClient: DynamoDBDocumentClient;
 
-if (!useLocalMock) {
-  ddbClient = new DynamoDBClient({
-    region: process.env.AWS_REGION || 'us-east-1',
-    ...(isDevelopment && {
-      endpoint: 'http://localhost:4566',
-      credentials: {
-        accessKeyId: 'test',
-        secretAccessKey: 'test',
-      },
-    }),
-  });
-  
-  docClient = DynamoDBDocumentClient.from(ddbClient);
-}
+dynamoClient = new DynamoDBClient({
+  region: process.env.AWS_REGION || 'us-east-1',
+  ...(isDevelopment && {
+    endpoint: 'http://localhost:4566',
+    credentials: {
+      accessKeyId: 'test',
+      secretAccessKey: 'test',
+    },
+  }),
+});
+
+dynamoDocClient = DynamoDBDocumentClient.from(dynamoClient);
 
 const TABLE_NAME = process.env.TASKS_TABLE || 'learn-dlq-tasks-local';
 
 export class TaskService {
   private tableName: string;
-  private mockService?: MockTaskService;
 
   constructor() {
     this.tableName = TABLE_NAME;
-    if (useLocalMock) {
-      this.mockService = new MockTaskService();
-      console.log('🎭 Using mock DynamoDB service for local testing');
-    }
   }
 
   async createTask(taskId: string, answer: string): Promise<Task> {
-    if (this.mockService) {
-      return this.mockService.createTask(taskId, answer);
-    }
-
     const task: Task = {
       taskId,
       answer,
       status: TaskStatus.PENDING,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      retryCount: 0
+      retries: 0
     };
 
     const command = new PutCommand({
@@ -60,43 +45,37 @@ export class TaskService {
       Item: task
     });
 
-    await docClient.send(command);
+    await dynamoDocClient.send(command);
+    console.log(`📝 Created task in DynamoDB: ${taskId}`);
     return task;
   }
 
   async getTask(taskId: string): Promise<Task | null> {
-    if (this.mockService) {
-      return this.mockService.getTask(taskId);
-    }
-
     const command = new GetCommand({
       TableName: this.tableName,
       Key: { taskId }
     });
 
-    const result = await docClient.send(command);
-    return result.Item as Task || null;
+    const result = await dynamoDocClient.send(command);
+    const task = result.Item as Task | undefined;
+    
+    console.log(`🔍 Retrieved task from DynamoDB: ${taskId} - ${task ? 'Found' : 'Not found'}`);
+    return task || null;
   }
 
   async updateTaskStatus(taskId: string, status: TaskStatus, error?: string): Promise<void> {
-    if (this.mockService) {
-      return this.mockService.updateTaskStatus(taskId, status, error);
-    }
-
-    const updateExpression = error 
-      ? 'SET #status = :status, updatedAt = :updatedAt, #error = :error'
-      : 'SET #status = :status, updatedAt = :updatedAt';
-    
-    const expressionAttributeNames: Record<string, string> = { '#status': 'status' };
-    if (error) {
-      expressionAttributeNames['#error'] = 'error';
-    }
-    
-    const expressionAttributeValues: Record<string, any> = {
+    const updateExpression = 'SET #status = :status, #updatedAt = :updatedAt' + (error ? ', #error = :error' : '');
+    const expressionAttributeNames: any = {
+      '#status': 'status',
+      '#updatedAt': 'updatedAt'
+    };
+    const expressionAttributeValues: any = {
       ':status': status,
       ':updatedAt': new Date().toISOString()
     };
+
     if (error) {
+      expressionAttributeNames['#error'] = 'error';
       expressionAttributeValues[':error'] = error;
     }
 
@@ -108,36 +87,38 @@ export class TaskService {
       ExpressionAttributeValues: expressionAttributeValues
     });
 
-    await docClient.send(command);
+    await dynamoDocClient.send(command);
+    console.log(`✏️ Updated task ${taskId} status in DynamoDB to: ${status}`);
   }
 
   async incrementRetryCount(taskId: string): Promise<void> {
-    if (this.mockService) {
-      return this.mockService.incrementRetryCount(taskId);
-    }
-
     const command = new UpdateCommand({
       TableName: this.tableName,
       Key: { taskId },
-      UpdateExpression: 'SET retryCount = retryCount + :inc, updatedAt = :updatedAt',
+      UpdateExpression: 'SET #retries = #retries + :inc, #updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#retries': 'retries',
+        '#updatedAt': 'updatedAt'
+      },
       ExpressionAttributeValues: {
         ':inc': 1,
         ':updatedAt': new Date().toISOString()
       }
     });
 
-    await docClient.send(command);
+    await dynamoDocClient.send(command);
+    console.log(`🔄 Incremented retry count for task ${taskId} in DynamoDB`);
   }
 
   async getAllTasks(): Promise<Task[]> {
-    if (this.mockService) {
-      return this.mockService.getAllTasks();
-    }
-
-    const result = await docClient.send(new ScanCommand({
+    const command = new ScanCommand({
       TableName: this.tableName
-    }));
+    });
 
-    return result.Items as Task[] || [];
+    const result = await dynamoDocClient.send(command);
+    const tasks = (result.Items as Task[]) || [];
+    
+    console.log(`�� Retrieved ${tasks.length} tasks from DynamoDB`);
+    return tasks;
   }
 }

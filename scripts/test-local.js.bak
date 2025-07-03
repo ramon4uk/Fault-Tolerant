@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+
+const AWS = require('aws-sdk');
+
+// Configure for LocalStack
+const lambda = new AWS.Lambda({
+  region: 'us-east-1',
+  endpoint: 'http://localhost:3002', // serverless-offline Lambda endpoint
+  accessKeyId: 'test',
+  secretAccessKey: 'test'
+});
+
+const dynamodb = new AWS.DynamoDB.DocumentClient({
+  region: 'us-east-1',
+  endpoint: 'http://localhost:4566',
+  accessKeyId: 'test',
+  secretAccessKey: 'test'
+});
+
+// Test scenarios
+async function testSubmitTask() {
+  console.log('🚀 Testing submitTask...');
+  
+  const payload = {
+    httpMethod: 'POST',
+    path: '/local/tasks',
+    body: JSON.stringify({ answer: 'Manual test submission' }),
+    headers: { 'Content-Type': 'application/json' }
+  };
+  
+  try {
+    const result = await lambda.invoke({
+      FunctionName: 'learn-dlq-local-submitTask',
+      Payload: JSON.stringify(payload)
+    }).promise();
+    
+    const response = JSON.parse(result.Payload);
+    console.log('✅ submitTask response:', response);
+    return JSON.parse(response.body);
+  } catch (error) {
+    console.error('❌ submitTask error:', error);
+  }
+}
+
+async function testProcessTask(taskId, answer) {
+  console.log('⚡ Testing processTask...');
+  
+  const sqsEvent = {
+    Records: [{
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn:aws:sqs:us-east-1:000000000000:learn-dlq-task-queue-local',
+      body: JSON.stringify({ taskId, answer }),
+      messageAttributes: {},
+      md5OfBody: 'test',
+      receiptHandle: 'test-receipt-handle'
+    }]
+  };
+  
+  try {
+    const result = await lambda.invoke({
+      FunctionName: 'learn-dlq-local-processTask',
+      Payload: JSON.stringify(sqsEvent)
+    }).promise();
+    
+    const response = JSON.parse(result.Payload);
+    console.log('✅ processTask response:', response);
+  } catch (error) {
+    console.error('❌ processTask error:', error);
+  }
+}
+
+async function checkTaskStatus(taskId) {
+  console.log('🔍 Checking task status...');
+  
+  try {
+    const result = await dynamodb.get({
+      TableName: 'learn-dlq-tasks-local',
+      Key: { taskId }
+    }).promise();
+    
+    console.log('📊 Task status:', result.Item);
+    return result.Item;
+  } catch (error) {
+    console.error('❌ Status check error:', error);
+  }
+}
+
+async function runFullTest() {
+  console.log('🧪 Running full end-to-end test...\n');
+  
+  // 1. Submit task
+  const task = await testSubmitTask();
+  if (!task) return;
+  
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // 2. Check initial status
+  await checkTaskStatus(task.taskId);
+  
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // 3. Manually process task
+  await testProcessTask(task.taskId, task.answer);
+  
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // 4. Check final status
+  await checkTaskStatus(task.taskId);
+}
+
+// Run the test
+runFullTest().catch(console.error); 

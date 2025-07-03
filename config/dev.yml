@@ -4,22 +4,27 @@ region: us-east-1
 
 # Lambda Configuration
 lambda:
-  timeout: 300
-  memorySize: 512
-  runtime: nodejs18.x
+  timeout: 30
+  memorySize: 256
 
 # SQS Configuration
 sqs:
-  visibilityTimeoutSeconds: 300
+  batchSize: 10
+  visibilityTimeout: 900  # 15 minutes
   messageRetentionPeriod: 1209600  # 14 days
-  maxReceiveCount: 3  # Initial + 2 retries
-  batchSize: 1
+  maxRetries: 2
 
 # DynamoDB Configuration
 dynamodb:
   billingMode: PAY_PER_REQUEST
   pointInTimeRecovery: false
-  streamViewType: NEW_AND_OLD_IMAGES
+  deletionProtection: false
+
+# Environment Variables
+environment:
+  STAGE: dev
+  LOG_LEVEL: debug
+  FAILURE_RATE: 0.3
 
 # API Gateway Configuration
 apiGateway:
@@ -38,7 +43,7 @@ taskProcessing:
   maxDelaySeconds: 900  # 15 minutes
   failureRate: 0.3  # 30% failure simulation
 
-# Tags
+# CloudFormation Tags
 tags:
   Environment: dev
   Project: learn-dlq

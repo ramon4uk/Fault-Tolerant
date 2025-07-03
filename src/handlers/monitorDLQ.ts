@@ -1,26 +1,30 @@
 import { SQSHandler } from 'aws-lambda';
 import { TaskService } from '../services/dynamodb';
-import { DLQMessage } from '../types';
+import { DLQMessage, TaskStatus } from '../types';
 
 const taskService = new TaskService();
 
 export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     try {
-      // Parse the DLQ message
+      // Parse the DLQ message (enhanced format from sendTaskToDLQ)
+      const rawMessage = JSON.parse(record.body);
       const dlqMessage: DLQMessage = {
-        ...JSON.parse(record.body),
-        timestamp: new Date().toISOString()
+        taskId: rawMessage.taskId,
+        answer: rawMessage.answer,
+        retries: rawMessage.retries,
+        errorMessage: rawMessage.dlqReason || 'Unknown error',
+        timestamp: rawMessage.dlqTimestamp || new Date().toISOString()
       };
 
-      const { taskId, answer, retryCount, errorMessage, timestamp } = dlqMessage;
+      const { taskId, answer, retries, errorMessage, timestamp } = dlqMessage;
 
       console.log('=== DLQ MESSAGE DETECTED ===');
       console.log(`Task ID: ${taskId}`);
       console.log(`Answer: ${answer}`);
-      console.log(`Retry Count: ${retryCount}`);
-      console.log(`Error Message: ${errorMessage || 'Max retries exceeded'}`);
-      console.log(`Timestamp: ${timestamp}`);
+      console.log(`Retry Count: ${retries}`);
+      console.log(`DLQ Reason: ${errorMessage}`);
+      console.log(`DLQ Timestamp: ${timestamp}`);
       console.log(`Record Message ID: ${record.messageId}`);
       console.log(`Receipt Handle: ${record.receiptHandle}`);
       console.log('============================');
@@ -30,24 +34,25 @@ export const handler: SQSHandler = async (event) => {
         eventType: 'DLQ_MESSAGE',
         taskId,
         answer,
-        retryCount,
-        errorMessage: errorMessage || 'Max retries exceeded',
-        timestamp,
+        retryCount: retries,
+        dlqReason: errorMessage,
+        dlqTimestamp: timestamp,
         messageId: record.messageId,
         receiptHandle: record.receiptHandle,
         approximateReceiveCount: record.attributes.ApproximateReceiveCount,
-        sentTimestamp: record.attributes.SentTimestamp
+        sentTimestamp: record.attributes.SentTimestamp,
+        severity: 'ERROR'
       }));
 
-      // Update task status in DynamoDB if not already marked as DLQ
+      // Update task status in DynamoDB if not already marked as FAILED
       const task = await taskService.getTask(taskId);
-      if (task && task.status !== 'DLQ') {
+      if (task && task.status !== TaskStatus.FAILED) {
         await taskService.updateTaskStatus(
           taskId, 
-          'DLQ' as any, 
-          errorMessage || 'Task routed to DLQ after max retries'
+          TaskStatus.FAILED, 
+          errorMessage || 'Task failed after max retries'
         );
-        console.log(`Updated task ${taskId} status to DLQ in DynamoDB`);
+        console.log(`Updated task ${taskId} status to FAILED in DynamoDB`);
       }
 
       // You could add additional monitoring actions here:

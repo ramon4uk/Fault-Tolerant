@@ -2,6 +2,8 @@
 
 A Node.js backend built with AWS services that demonstrates task processing with exponential backoff retry strategy and Dead Letter Queue (DLQ) monitoring.
 
+**🚀 Designed for AWS deployment** - Full functionality requires AWS services. Local development has [known limitations](#local-development) with SQS integration.
+
 ## Architecture
 
 ### High-Level Architecture Diagram
@@ -61,6 +63,7 @@ graph TB
 
 ## Features
 
+**AWS Deployment Features:**
 - ✅ Task submission via REST API
 - ✅ Asynchronous task processing
 - ✅ Exponential backoff retry strategy (max 2 retries)
@@ -70,6 +73,9 @@ graph TB
 - ✅ 30% random failure simulation
 - ✅ TypeScript implementation
 - ✅ Serverless Framework deployment
+
+**Local Development Limitations:**
+- ⚠️ SQS integration issues - see [Local Development](#local-development) section
 
 ## Project Structure
 
@@ -105,6 +111,62 @@ npm install
 2. Configure AWS credentials:
 ```bash
 aws configure
+```
+
+## Local Development
+
+### ⚠️ Known Limitations
+
+**Current local development setup has limitations with SQS integration:**
+
+#### ✅ What Works Locally:
+- **API Gateway + Lambda**: Task submission and status retrieval
+- **DynamoDB**: Task storage and retrieval via LocalStack
+- **TypeScript compilation**: Code changes with hot reload
+- **Basic testing**: API endpoints respond correctly
+
+#### ❌ What Doesn't Work Locally:
+- **SQS → Lambda integration**: Tasks get stuck in `PENDING` status
+- **Task processing**: `processTask` function not triggered by SQS events
+- **Retry mechanism**: No automatic retries occur
+- **DLQ processing**: Dead letter queue monitoring not functional
+
+#### 🔄 Current Behavior:
+```bash
+# Start local development
+npm start
+
+# Submit task - works ✅
+curl -X POST http://localhost:3000/local/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"answer": "test"}'
+
+# Response: {"taskId": "...", "status": "PENDING", ...}
+
+# Check status - works ✅ 
+curl http://localhost:3000/local/tasks
+
+# Result: Tasks remain in PENDING status indefinitely ❌
+```
+
+### 📋 Alternatives for Local Development
+
+For full functionality testing, see **[LOCAL_DEVELOPMENT_ALTERNATIVES.md](LOCAL_DEVELOPMENT_ALTERNATIVES.md)** which provides several proven approaches:
+
+1. **AWS Dev Environment** (Recommended) - Use real AWS services
+2. **Manual Testing Scripts** - Bypass SQS integration issues
+3. **AWS SAM Local** - Better LocalStack integration
+4. **Hybrid Approach** - Mix of local and AWS services
+
+### 🚀 Quick Start for Full Testing
+
+For immediate full functionality:
+```bash
+# Deploy to AWS dev environment
+npm run deploy:dev
+
+# Test with real AWS services
+npm run test:dev
 ```
 
 ## Deployment
@@ -156,7 +218,7 @@ Response:
     {
       "taskId": "uuid-here",
       "answer": "task answer",
-      "status": "COMPLETED|FAILED|PENDING|PROCESSING|DLQ",
+      "status": "PROCESSED|FAILED|PENDING|PROCESSING|DLQ",
       "retries": 0,
       "createdAt": "2024-01-01T00:00:00.000Z",
       "updatedAt": "2024-01-01T00:00:00.000Z",
@@ -193,7 +255,7 @@ sequenceDiagram
     PL->>DB: Update status (PROCESSING)
     
     alt Task Success (70%)
-        PL->>DB: Update status (COMPLETED)
+        PL->>DB: Update status (PROCESSED)
     else Task Failure (30%)
         PL->>DB: Increment retry count
         alt Retry Available
@@ -238,7 +300,7 @@ sequenceDiagram
 
 - `PENDING`: Task queued for processing
 - `PROCESSING`: Task currently being processed
-- `COMPLETED`: Task completed successfully
+- `PROCESSED`: Task processed successfully
 - `FAILED`: Task failed but will retry
 - `DLQ`: Task sent to Dead Letter Queue after max retries
 
@@ -287,16 +349,36 @@ npm run logs -- -f processTask -t
 
 ## Testing
 
-Test with curl:
+### AWS Environment Testing (Full Functionality)
+
+Test with curl against deployed AWS environment:
 ```bash
 # Submit a task
 curl -X POST https://your-api-id.execute-api.region.amazonaws.com/dev/tasks \
   -H "Content-Type: application/json" \
   -d '{"answer": "test answer"}'
 
-# Check task status
+# Check task status (will show PROCESSED/FAILED after processing)
 curl https://your-api-id.execute-api.region.amazonaws.com/dev/tasks
 ```
+
+### Local Testing (Limited Functionality)
+
+Test locally (task submission only):
+```bash
+# Start local development
+npm start
+
+# Submit a task (works)
+curl -X POST http://localhost:3000/local/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"answer": "test answer"}'
+
+# Check task status (will remain PENDING - see Local Development section)
+curl http://localhost:3000/local/tasks
+```
+
+**Note**: For full end-to-end testing including task processing, use the AWS environment or see the [LOCAL_DEVELOPMENT_ALTERNATIVES.md](LOCAL_DEVELOPMENT_ALTERNATIVES.md) guide.
 
 ## Cleanup
 

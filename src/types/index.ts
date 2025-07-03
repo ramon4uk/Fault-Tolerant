@@ -2,7 +2,7 @@ export interface Task {
   taskId: string;
   answer: string;
   status: TaskStatus;
-  retryCount: number;
+  retries: number;
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -11,7 +11,7 @@ export interface Task {
 export enum TaskStatus {
   PENDING = 'PENDING',
   PROCESSING = 'PROCESSING',
-  COMPLETED = 'COMPLETED',
+  PROCESSED = 'PROCESSED',
   FAILED = 'FAILED',
   DLQ = 'DLQ'
 }
@@ -33,7 +33,7 @@ export interface TaskStatusResponse {
 export interface SQSTaskMessage {
   taskId: string;
   answer: string;
-  retryCount: number;
+  retries: number;
 }
 
 // Alias for backward compatibility
@@ -42,7 +42,7 @@ export type TaskMessage = SQSTaskMessage;
 export interface DLQMessage {
   taskId: string;
   answer: string;
-  retryCount: number;
+  retries: number;
   errorMessage: string;
   timestamp: string;
 }

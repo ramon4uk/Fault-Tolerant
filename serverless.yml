@@ -10,8 +10,8 @@ provider:
   
   environment:
     TASKS_TABLE: ${self:custom.tasksTable}
-    TASK_QUEUE_URL: !Ref TaskQueue
-    DLQ_URL: !Ref TaskDLQ
+    TASK_QUEUE_URL: ${file(./config/${self:custom.stage}.yml):environment.TASK_QUEUE_URL}
+    DLQ_URL: ${file(./config/${self:custom.stage}.yml):environment.DLQ_URL}
     MAX_RETRIES: ${file(./config/${self:custom.stage}.yml):taskProcessing.maxRetries}
     BASE_DELAY_SECONDS: ${file(./config/${self:custom.stage}.yml):taskProcessing.baseDelaySeconds}
     MAX_DELAY_SECONDS: ${file(./config/${self:custom.stage}.yml):taskProcessing.maxDelaySeconds}
@@ -21,7 +21,10 @@ provider:
     lambda: ${file(./config/${self:custom.stage}.yml):monitoring.enableXRay}
   
   logs:
-    restApi: true
+    restApi: false
+  
+  apiGateway:
+    shouldStartNameWithService: true
   
   iam:
     role:
@@ -97,6 +100,11 @@ custom:
     accessKeyId: test
     secretAccessKey: test
     skipCacheInvalidation: false
+    queues:
+      - queue: learn-dlq-task-queue-local
+        url: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/learn-dlq-task-queue-local
+      - queue: learn-dlq-task-dlq-local
+        url: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/learn-dlq-task-dlq-local
 
 functions:
   submitTask:
@@ -125,9 +133,8 @@ functions:
     memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
     events:
       - sqs:
-          arn: !GetAtt TaskQueue.Arn
+          arn: arn:aws:sqs:us-east-1:000000000000:learn-dlq-task-queue-local
           batchSize: ${file(./config/${self:custom.stage}.yml):sqs.batchSize}
-          maximumBatchingWindowInSeconds: 0
   
   monitorDLQ:
     handler: src/handlers/monitorDLQ.handler
@@ -135,9 +142,8 @@ functions:
     memorySize: ${file(./config/${self:custom.stage}.yml):lambda.memorySize}
     events:
       - sqs:
-          arn: !GetAtt TaskDLQ.Arn
+          arn: arn:aws:sqs:us-east-1:000000000000:learn-dlq-task-dlq-local
           batchSize: 1
-          maximumBatchingWindowInSeconds: 0
 
 resources:
   Resources:
@@ -156,25 +162,44 @@ resources:
           PointInTimeRecoveryEnabled: ${file(./config/${self:custom.stage}.yml):dynamodb.pointInTimeRecovery}
         StreamSpecification:
           StreamViewType: ${file(./config/${self:custom.stage}.yml):dynamodb.streamViewType}
-        Tags: ${self:custom.tags}
+        Tags:
+          - Key: Environment
+            Value: ${self:custom.stage}
+          - Key: Project
+            Value: learn-dlq
+          - Key: Owner
+            Value: developer
     
     TaskQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: ${self:service}-task-queue-${self:custom.stage}
-        VisibilityTimeoutSeconds: ${file(./config/${self:custom.stage}.yml):sqs.visibilityTimeoutSeconds}
+        VisibilityTimeout: ${file(./config/${self:custom.stage}.yml):sqs.visibilityTimeoutSeconds}
         MessageRetentionPeriod: ${file(./config/${self:custom.stage}.yml):sqs.messageRetentionPeriod}
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt TaskDLQ.Arn
           maxReceiveCount: ${file(./config/${self:custom.stage}.yml):sqs.maxReceiveCount}
-        Tags: ${self:custom.tags}
+        Tags:
+          - Key: Environment
+            Value: ${self:custom.stage}
+          - Key: Project
+            Value: learn-dlq
+          - Key: Owner
+            Value: developer
     
     TaskDLQ:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: ${self:service}-task-dlq-${self:custom.stage}
+        VisibilityTimeout: 90
         MessageRetentionPeriod: ${file(./config/${self:custom.stage}.yml):sqs.messageRetentionPeriod}
-        Tags: ${self:custom.tags}
+        Tags:
+          - Key: Environment
+            Value: ${self:custom.stage}
+          - Key: Project
+            Value: learn-dlq
+          - Key: Owner
+            Value: developer
 
   Outputs:
     TasksTableName:

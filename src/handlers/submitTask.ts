@@ -33,14 +33,8 @@ export const handler: APIGatewayProxyHandler = async (event) => {
     await sqsService.sendTaskToQueue({
       taskId,
       answer: body.answer,
-      retryCount: 0
+      retries: 0
     });
-
-    const response: TaskSubmissionResponse = {
-      taskId,
-      status: TaskStatus.PENDING,
-      message: 'Task submitted successfully'
-    };
 
     return {
       statusCode: 201,
@@ -48,7 +42,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify(response)
+      body: JSON.stringify(task)
     };
   } catch (error) {
     console.error('Error submitting task:', error);

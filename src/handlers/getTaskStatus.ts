@@ -7,10 +7,6 @@ const taskService = new TaskService();
 export const handler: APIGatewayProxyHandler = async (event) => {
   try {
     const tasks = await taskService.getAllTasks();
-    
-    const response: TaskStatusResponse = {
-      tasks
-    };
 
     return {
       statusCode: 200,
@@ -18,7 +14,7 @@ export const handler: APIGatewayProxyHandler = async (event) => {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
       },
-      body: JSON.stringify(response)
+      body: JSON.stringify(tasks)
     };
   } catch (error) {
     console.error('Error fetching task status:', error);

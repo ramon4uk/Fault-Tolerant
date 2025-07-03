@@ -1,10 +1,12 @@
 import { SQSClient, SendMessageCommand, GetQueueAttributesCommand } from '@aws-sdk/client-sqs';
 import { TaskMessage } from '../types';
 
-// Configure SQS client for local development
+// Check if we're running in development mode for LocalStack
 const isDevelopment = process.env.NODE_ENV === 'development' || process.env.IS_LOCAL || process.env.IS_OFFLINE;
 
-const sqsClient = new SQSClient({
+let sqsClient: SQSClient;
+
+sqsClient = new SQSClient({
   region: process.env.AWS_REGION || 'us-east-1',
   ...(isDevelopment && {
     endpoint: 'http://localhost:4566',
@@ -20,8 +22,8 @@ export class SQSService {
   private dlqUrl: string;
 
   constructor() {
-    this.taskQueueUrl = process.env.TASK_QUEUE_URL || 'http://localhost:4566/000000000000/learn-dlq-task-queue-local';
-    this.dlqUrl = process.env.DLQ_URL || 'http://localhost:4566/000000000000/learn-dlq-task-dlq-local';
+    this.taskQueueUrl = process.env.TASK_QUEUE_URL || 'http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/learn-dlq-task-queue-local';
+    this.dlqUrl = process.env.DLQ_URL || 'http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/learn-dlq-task-dlq-local';
   }
 
   async sendTaskToQueue(taskMessage: TaskMessage): Promise<void> {
@@ -37,6 +39,7 @@ export class SQSService {
     });
 
     await sqsClient.send(command);
+    console.log(`📬 Sent task to SQS queue: ${taskMessage.taskId}`);
   }
 
   async sendTaskToDLQ(taskMessage: TaskMessage, reason: string): Promise<void> {
@@ -62,6 +65,7 @@ export class SQSService {
     });
 
     await sqsClient.send(command);
+    console.log(`💀 Sent task to DLQ: ${taskMessage.taskId} - Reason: ${reason}`);
   }
 
   async getQueueAttributes(queueUrl: string): Promise<any> {

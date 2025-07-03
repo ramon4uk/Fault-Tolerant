@@ -17,9 +17,9 @@ export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     try {
       const message: SQSTaskMessage = JSON.parse(record.body);
-      const { taskId, answer, retryCount } = message;
+      const { taskId, answer, retries } = message;
 
-      console.log(`Processing task ${taskId}, attempt ${retryCount + 1}`);
+      console.log(`Processing task ${taskId}, attempt ${retries + 1}`);
 
       // Update task status to PROCESSING
       await taskService.updateTaskStatus(taskId, TaskStatus.PROCESSING);
@@ -28,19 +28,19 @@ export const handler: SQSHandler = async (event) => {
       const processingSuccess = simulateTaskProcessing();
 
       if (processingSuccess) {
-        // Task completed successfully
-        console.log(`Task ${taskId} completed successfully`);
-        await taskService.updateTaskStatus(taskId, TaskStatus.COMPLETED);
+        // Task processed successfully
+        console.log(`Task ${taskId} processed successfully`);
+        await taskService.updateTaskStatus(taskId, TaskStatus.PROCESSED);
       } else {
         // Task failed - implement retry logic
-        console.log(`Task ${taskId} failed, retry count: ${retryCount}`);
+        console.log(`Task ${taskId} failed, retry count: ${retries}`);
         
-        if (shouldRetry(retryCount)) {
+        if (shouldRetry(retries)) {
           // Increment retry count in DynamoDB
           await taskService.incrementRetryCount(taskId);
           
           // Calculate backoff delay
-          const delaySeconds = calculateBackoffDelay(retryCount);
+          const delaySeconds = calculateBackoffDelay(retries);
           
           console.log(`Retrying task ${taskId} in ${delaySeconds} seconds`);
           
@@ -48,35 +48,60 @@ export const handler: SQSHandler = async (event) => {
           await sqsService.sendTaskToQueue({
             taskId,
             answer,
-            retryCount: retryCount + 1
-          }, delaySeconds);
+            retries: retries + 1
+          });
           
           await taskService.updateTaskStatus(
             taskId, 
             TaskStatus.PENDING, 
-            `Retry ${retryCount + 1} scheduled`
+            `Retry ${retries + 1} scheduled`
           );
         } else {
           // Max retries exceeded - send to DLQ
           console.log(`Task ${taskId} exceeded max retries, sending to DLQ`);
           
+          // Explicitly send to DLQ with reason
+          await sqsService.sendTaskToDLQ({
+            taskId,
+            answer,
+            retries
+          }, 'Max retries exceeded after task processing failures');
+          
+          // Set status to FAILED for frontend (DLQ is internal)
           await taskService.updateTaskStatus(
             taskId, 
-            TaskStatus.DLQ, 
+            TaskStatus.FAILED, 
             'Max retries exceeded'
           );
-          
-          // Note: The actual DLQ routing is handled by SQS configuration
-          // This is just for logging and status tracking
-          throw new Error(`Task ${taskId} failed after maximum retries`);
         }
       }
     } catch (error) {
       console.error('Error processing SQS message:', error);
       
-      // If we can't parse the message or there's a critical error,
-      // let SQS handle the retry/DLQ logic
-      throw error;
+      // Try to extract taskId from the record for DLQ routing
+      try {
+        const message: SQSTaskMessage = JSON.parse(record.body);
+        const { taskId, answer, retries } = message;
+        
+        // Send to DLQ for critical processing errors
+        await sqsService.sendTaskToDLQ({
+          taskId,
+          answer,
+          retries
+        }, `Critical processing error: ${error instanceof Error ? error.message : String(error)}`);
+        
+        await taskService.updateTaskStatus(
+          taskId,
+          TaskStatus.FAILED,
+          `Critical error: ${error instanceof Error ? error.message : String(error)}`
+        );
+        
+        console.log(`Task ${taskId} sent to DLQ due to critical error`);
+      } catch (parseError) {
+        console.error('Could not parse message for DLQ routing:', parseError);
+        // If we can't parse the message, let SQS handle it
+        throw error;
+      }
     }
   }
 };

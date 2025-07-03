@@ -2,6 +2,12 @@
 stage: staging
 region: us-east-1
 
+# Environment Variables for AWS deployment
+# These are placeholders - actual values will be CloudFormation refs
+environment:
+  TASK_QUEUE_URL: !Ref TaskQueue
+  DLQ_URL: !Ref TaskDLQ
+
 # Lambda Configuration
 lambda:
   timeout: 300
@@ -36,7 +42,7 @@ taskProcessing:
   maxRetries: 2
   baseDelaySeconds: 2
   maxDelaySeconds: 900  # 15 minutes
-  failureRate: 0.2  # 20% failure simulation
+  failureRate: 0.3  # 30% failure simulation (back to normal)
 
 # Tags
 tags:

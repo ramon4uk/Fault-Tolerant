@@ -24,7 +24,11 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "serverless offline --stage local",
     "start:simple": "IS_LOCAL=true serverless offline --stage local --noTimeout",
-    "test:api": "./test-api.sh"
+    "test:api": "./test-api.sh",
+    "test:local": "node scripts/local-test.js",
+    "test:manual": "node scripts/local-test.js",
+    "dev:aws": "echo 'Use dev environment: npm run deploy:dev && npm run test:dev'",
+    "test:dev": "curl -X POST $(npm run info:dev --silent | grep ServiceEndpoint | cut -d' ' -f2)/dev/tasks -H 'Content-Type: application/json' -d '{\"answer\": \"Dev test\"}'"
   },
   "keywords": [],
   "author": "",
